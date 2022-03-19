@@ -115,7 +115,30 @@ def insert_tweet(connection,tweet):
 
         # create/update the user
         sql = sqlalchemy.sql.text('''
-            ''')
+        INSERT INTO users
+            (id_users,created_at,updated_at,screen_name,name,location,id_urls,description,protected,verified,friends_count,listed_count,favourites_count,statuses_count,withheld_in_countries)
+        VALUES
+        (:id_users,:created_at,:updated_at,:screen_name,:name,:location,:id_urls,:description,:protected,:verified,:friends_count,:listed_count,:favourites_count,:statuses_count,:withheld_in_countries)
+        ON CONFLICT (id_users) DO
+        NOTHING
+        ''')
+        res = connection.execute(sql, {
+            'id_users':tweet['user']['id'],
+            'created_at':tweet['user']['created_at'],
+            'updated_at':tweet['created_at'],
+            'screen_name':remove_nulls(tweet['user']['screen_name']),
+            'name':remove_nulls(tweet['user']['name']),
+            'location':remove_nulls(tweet['user']['location']),
+            'id_urls':user_id_urls,
+            'description':remove_nulls(tweet['user']['description']),
+            'protected':tweet['user']['protected'],
+            'verified':tweet['user']['verified'],
+            'friends_count':tweet['user']['friends_count'],
+            'listed_count':tweet['user']['listed_count'],
+            'favourites_count':tweet['user']['favourites_count'],
+            'statuses_count':tweet['user']['statuses_count'],
+            'withheld_in_countries':tweet['user'].get('witheld_in_countries',None)
+            })
 
         ########################################
         # insert into the tweets table
@@ -172,8 +195,25 @@ def insert_tweet(connection,tweet):
         # This means that every "in_reply_to_user_id" field must reference a valid entry in the users table.
         # If the id is not in the users table, then you'll need to add it in an "unhydrated" form.
         if tweet.get('in_reply_to_user_id',None) is not None:
-            sql=sqlalchemy.sql.text('''
+             sql = sqlalchemy.sql.text('''
+                insert into users 
+                (id_users)
+                values
+                (:id_users)
+                on conflict do nothing
+                returning id_users;
+            ''')
+             res = connection.execute(sql,{'id_users':tweet['in_reply_to_user_id']}).first()
+             # if conflict
+             if res is None:
+                sql = sqlalchemy.sql.text('''
+                    select id_users 
+                    from users
+                    where id_users=:id_users
                 ''')
+                res = connection.execute(sql,{'id_users':tweet['in_reply_to_user_id']}).first()
+            
+             in_reply_to_user_id = res[0]
 
         # insert the tweet
         sql=sqlalchemy.sql.text(f'''
